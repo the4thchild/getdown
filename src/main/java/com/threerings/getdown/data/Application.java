@@ -1,7 +1,7 @@
 //
 // Getdown - application installer, patcher and launcher
-// Copyright (C) 2004-2013 Three Rings Design, Inc.
-// http://code.google.com/p/getdown/source/browse/LICENSE
+// Copyright (C) 2004-2014 Three Rings Design, Inc.
+// https://raw.github.com/threerings/getdown/master/LICENSE
 
 package com.threerings.getdown.data;
 
@@ -827,6 +827,14 @@ public class Application
     public boolean hasOptimumJvmArgs ()
     {
         return _optimumJvmArgs != null;
+    }
+
+    /**
+     * Returns true if the app should attempt to run even if we have no Internet connection.
+     */
+    public boolean allowOffline ()
+    {
+        return _allowOffline;
     }
 
     /**

@@ -1,7 +1,7 @@
 //
 // Getdown - application installer, patcher and launcher
-// Copyright (C) 2004-2013 Three Rings Design, Inc.
-// http://code.google.com/p/getdown/source/browse/LICENSE
+// Copyright (C) 2004-2014 Three Rings Design, Inc.
+// https://raw.github.com/threerings/getdown/master/LICENSE
 
 package com.threerings.getdown.launcher;
 
@@ -162,7 +162,9 @@ public abstract class Getdown extends Thread
 
         try {
             _dead = false;
-            if (detectProxy()) {
+            // if we fail to detect a proxy, but we're allowed to run offline, then go ahead and
+            // run the app anyway because we're prepared to cope with not being able to update
+            if (detectProxy() || _app.allowOffline()) {
                 getdown();
             } else if (_silent) {
                 log.warning("Need a proxy, but we don't want to bother anyone.  Exiting.");
