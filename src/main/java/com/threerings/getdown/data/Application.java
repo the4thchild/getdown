@@ -18,6 +18,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.io.RandomAccessFile;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -57,7 +58,6 @@ import com.samskivert.util.ArrayUtil;
 import com.samskivert.util.RandomUtil;
 import com.samskivert.util.RunAnywhere;
 import com.samskivert.util.StringUtil;
-
 import com.threerings.getdown.launcher.RotatingBackgrounds;
 import com.threerings.getdown.util.ConfigUtil;
 import com.threerings.getdown.util.ConnectionUtil;
@@ -223,7 +223,7 @@ public class Application
     /**
      * Creates an application instance with no signers.
      *
-     * @see #Application(File, String, Object[], String[], String[])
+     * @see #Application(File, String, List, String[], String[])
      */
     public Application (File appdir, String appid)
     {
@@ -376,7 +376,7 @@ public class Application
         String infix = (auxgroup == null) ? "" : ("-" + auxgroup);
         String pfile = "patch" + infix + _version + ".dat";
         try {
-            URL remote = new URL(createVAppBase(_targetVersion), pfile);
+            URL remote = new URL(createVAppBase(_targetVersion), encodePath(pfile));
             return new Resource(pfile, remote, getLocalPath(pfile), false);
         } catch (Exception e) {
             log.warning("Failed to create patch resource path",
@@ -398,7 +398,7 @@ public class Application
 
         String vmfile = LaunchUtil.LOCAL_JAVA_DIR + ".jar";
         try {
-            URL remote = new URL(createVAppBase(_targetVersion), _javaLocation);
+            URL remote = new URL(createVAppBase(_targetVersion), encodePath(_javaLocation));
             return new Resource(vmfile, remote, getLocalPath(vmfile), true);
         } catch (Exception e) {
             log.warning("Failed to create VM resource", "vmfile", vmfile, "appbase", _appbase,
@@ -415,7 +415,7 @@ public class Application
     {
         String file = "full";
         try {
-            URL remote = new URL(createVAppBase(_targetVersion), file);
+            URL remote = new URL(createVAppBase(_targetVersion), encodePath(file));
             return new Resource(file, remote, getLocalPath(file), false);
         } catch (Exception e) {
             log.warning("Failed to create full resource path",
@@ -435,7 +435,7 @@ public class Application
         try {
             String suffix = _trackingURLSuffix == null ? "" : _trackingURLSuffix;
             String ga = getGATrackingCode();
-            return _trackingURL == null ? null : new URL(_trackingURL + event + suffix + ga);
+            return _trackingURL == null ? null : new URL(encodePath(_trackingURL + event + suffix + ga));
         } catch (MalformedURLException mue) {
             log.warning("Invalid tracking URL", "path", _trackingURL, "event", event, "error", mue);
             return null;
@@ -498,16 +498,21 @@ public class Application
             else if ((config = getLocalPath(CONFIG_FILE + "_old")).exists()) {
                 cdata = ConfigUtil.parseConfig(config, checkPlatform);
             }
+            // otherwise, issue a warning that we found no getdown file
+            else {
+                log.info("Found no getdown.txt file", "appdir", _appdir);
+            }
         } catch (Exception e) {
             log.warning("Failure reading config file", "file", config, e);
         }
+
         // if we failed to read our config file, check for an appbase specified via a system
         // property; we can use that to bootstrap ourselves back into operation
         if (cdata == null) {
-            log.info("Found no getdown.txt file. Falling back to appbase system prop",
-                     "appbase", SysProps.appBase());
+            String appbase = SysProps.appBase();
+            log.info("Attempting to obtain 'appbase' from system property", "appbase", appbase);
             cdata = new HashMap<String,Object>();
-            cdata.put("appbase", SysProps.appBase());
+            cdata.put("appbase", appbase);
         }
 
         // first determine our application base, this way if anything goes wrong later in the
@@ -758,7 +763,7 @@ public class Application
     public URL getRemoteURL (String path)
         throws MalformedURLException
     {
-        return new URL(_vappbase, path);
+        return new URL(_vappbase, encodePath(path));
     }
 
     /**
@@ -1674,6 +1679,15 @@ public class Application
             appbase = m.replaceAll(appbaseDomain + "$2");
         }
         return appbase;
+    }
+
+    /**
+     * Encodes a path for use in a URL.
+     */
+    protected static String encodePath (String path)
+    {
+        // URLEncoder is too fancy for paths, we want to keep /
+        return path.replace(" ", "%20");
     }
 
     /**

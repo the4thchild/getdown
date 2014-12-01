@@ -1,22 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.sonatype.oss</groupId>
+    <artifactId>oss-parent</artifactId>
+    <version>7</version>
+  </parent>
+
   <groupId>com.threerings</groupId>
   <artifactId>getdown</artifactId>
   <packaging>jar</packaging>
-  <version>1.4-SNAPSHOT</version>
+  <version>1.5-SNAPSHOT</version>
+
   <name>getdown</name>
   <description>An application installer and updater.</description>
   <url>https://github.com/threerings/getdown</url>
   <issueManagement>
     <url>https://github.com/threerings/getdown/issues</url>
   </issueManagement>
-
-  <parent>
-    <groupId>org.sonatype.oss</groupId>
-    <artifactId>oss-parent</artifactId>
-    <version>7</version>
-  </parent>
 
   <licenses>
     <license>
@@ -101,15 +102,18 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
-        <version>2.3.2</version>
+        <version>3.1</version>
         <configuration>
           <source>1.5</source>
           <target>1.5</target>
           <fork>true</fork>
           <showDeprecation>true</showDeprecation>
           <showWarnings>true</showWarnings>
-          <!-- yes, those quoted spaces are a workaround sanctioned by the Maven idiocracy -->
-          <compilerArgument>-Xlint" "-Xlint:-serial" "-Xlint:-path</compilerArgument>
+          <compilerArgs>
+            <arg>-Xlint</arg>
+            <arg>-Xlint:-serial</arg>
+            <arg>-Xlint:-path</arg>
+          </compilerArgs>
         </configuration>
       </plugin>
       <plugin>
@@ -130,10 +134,9 @@
         </configuration>
       </plugin>
       <plugin>
-        <!-- TODO: return to stock groupId when they make it work with 4.5+: com.pyx4me -->
         <groupId>com.github.wvengen</groupId>
         <artifactId>proguard-maven-plugin</artifactId>
-        <version>2.0.7</version>
+        <version>2.0.8</version>
         <executions>
          <execution>
            <phase>package</phase>
@@ -144,12 +147,12 @@
           <dependency>
             <groupId>net.sf.proguard</groupId>
             <artifactId>proguard-base</artifactId>
-            <version>4.11</version>
+            <version>5.1</version>
             <scope>runtime</scope>
           </dependency>
         </dependencies>
         <configuration>
-          <proguardVersion>4.11</proguardVersion>
+          <proguardVersion>5.1</proguardVersion>
           <outputDirectory>${project.build.directory}</outputDirectory>
           <outjar>${project.build.finalName}.jar</outjar>
           <injar>${project.build.finalName}.jar</injar>
@@ -196,40 +199,50 @@
         </configuration>
       </plugin>
     </plugins>
-
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <!-- Tell m2eclipse to ignore the enforcer plugin from our parent. Otherwise it warns
-               about not being able to run it. -->
-          <groupId>org.eclipse.m2e</groupId>
-          <artifactId>lifecycle-mapping</artifactId>
-          <version>1.0.0</version>
-          <configuration>
-            <lifecycleMappingMetadata>
-              <pluginExecutions>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-enforcer-plugin</artifactId>
-                    <versionRange>[1.0,)</versionRange>
-                    <goals>
-                      <goal>enforce</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore />
-                  </action>
-                </pluginExecution>
-              </pluginExecutions>
-            </lifecycleMappingMetadata>
-          </configuration>
-        </plugin>
-      </plugins>
-    </pluginManagement>
   </build>
 
   <profiles>
+    <profile>
+      <id>eclipse</id>
+      <activation>
+        <property>
+          <name>m2e.version</name>
+        </property>
+      </activation>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <plugin>
+              <!-- Tell m2eclipse to ignore the enforcer plugin from our parent. Otherwise it warns
+                   about not being able to run it. -->
+              <groupId>org.eclipse.m2e</groupId>
+              <artifactId>lifecycle-mapping</artifactId>
+              <version>1.0.0</version>
+              <configuration>
+                <lifecycleMappingMetadata>
+                  <pluginExecutions>
+                    <pluginExecution>
+                      <pluginExecutionFilter>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <versionRange>[1.0,)</versionRange>
+                        <goals>
+                          <goal>enforce</goal>
+                        </goals>
+                      </pluginExecutionFilter>
+                      <action>
+                        <ignore />
+                      </action>
+                    </pluginExecution>
+                  </pluginExecutions>
+                </lifecycleMappingMetadata>
+              </configuration>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
+    </profile>
+
     <profile>
       <id>release-sign-artifacts</id>
       <activation>
@@ -306,5 +319,23 @@
         <plugin.jar.path>/usr/share/icedtea-web/plugin.jar</plugin.jar.path>
       </properties>
     </profile>
+
+    <!-- For deploying to a local place -->
+    <profile>
+      <id>deploy-local</id>
+      <distributionManagement>
+        <repository>
+          <id>deploy-local-dir</id>
+          <name>Local Maven repository</name>
+          <url>file://${deploy.local.dir}</url>
+        </repository>
+        <snapshotRepository>
+          <id>deploy-local-dir</id>
+          <name>Local Maven repository</name>
+          <url>file://${deploy.local.dir}</url>
+        </snapshotRepository>
+      </distributionManagement>
+    </profile>
+
   </profiles>
 </project>
