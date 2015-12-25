@@ -5,26 +5,27 @@
 
 package com.threerings.getdown.tools;
 
-import java.io.IOException;
-import java.io.OutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
-import java.io.LineNumberReader;
 import java.io.InputStreamReader;
+import java.io.LineNumberReader;
 
-import java.util.Set;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.ArrayList;
+import java.util.Map;
+import java.util.Set;
 
-import java.util.jar.JarOutputStream;
-import java.util.jar.JarFile;
 import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.jar.JarOutputStream;
 
+import com.samskivert.io.StreamUtil;
 import com.threerings.getdown.util.ProgressObserver;
 
 /**
@@ -43,130 +44,134 @@ public class JarDiffPatcher implements JarDiffCodes
      *
      * @throws IOException if any problem occurs during patching.
      */
-    public void patchJar (String jarPath, String diffPath, OutputStream target,
-                          ProgressObserver observer)
+    public void patchJar (String jarPath, String diffPath, File target, ProgressObserver observer)
         throws IOException
     {
-        File oldFile = new File(jarPath);
-        File diffFile = new File(diffPath);
-        JarOutputStream jos = new JarOutputStream(target);
-        JarFile oldJar = new JarFile(oldFile);
-        JarFile jarDiff = new JarFile(diffFile);
-        Set<String> ignoreSet = new HashSet<String>();
+        File oldFile = new File(jarPath), diffFile = new File(diffPath);
+        JarOutputStream jos = null;
+        JarFile oldJar = null, jarDiff = null;
+        try {
+            jos = new JarOutputStream(new FileOutputStream(target));
+            oldJar = new JarFile(oldFile);
+            jarDiff = new JarFile(diffFile);
+            Set<String> ignoreSet = new HashSet<String>();
 
-        Map<String, String> renameMap = new HashMap<String, String>();
-        determineNameMapping(jarDiff, ignoreSet, renameMap);
+            Map<String, String> renameMap = new HashMap<String, String>();
+            determineNameMapping(jarDiff, ignoreSet, renameMap);
 
-        // get all keys in renameMap
-        String[] keys = renameMap.keySet().toArray(new String[renameMap.size()]);
+            // get all keys in renameMap
+            String[] keys = renameMap.keySet().toArray(new String[renameMap.size()]);
 
-        // Files to implicit move
-        Set<String> oldjarNames  = new HashSet<String>();
-        Enumeration<JarEntry> oldEntries = oldJar.entries();
-        if (oldEntries != null) {
-            while  (oldEntries.hasMoreElements()) {
-                oldjarNames.add(oldEntries.nextElement().getName());
+            // Files to implicit move
+            Set<String> oldjarNames  = new HashSet<String>();
+            Enumeration<JarEntry> oldEntries = oldJar.entries();
+            if (oldEntries != null) {
+                while  (oldEntries.hasMoreElements()) {
+                    oldjarNames.add(oldEntries.nextElement().getName());
+                }
             }
-        }
 
-        // size depends on the three parameters below, which is basically the
-        // counter for each loop that do the actual writes to the output file
-        // since oldjarNames.size() changes in the first two loop below, we
-        // need to adjust the size accordingly also when oldjarNames.size()
-        // changes
-        double size = oldjarNames.size() + keys.length + jarDiff.size();
-        double currentEntry = 0;
+            // size depends on the three parameters below, which is basically the
+            // counter for each loop that do the actual writes to the output file
+            // since oldjarNames.size() changes in the first two loop below, we
+            // need to adjust the size accordingly also when oldjarNames.size()
+            // changes
+            double size = oldjarNames.size() + keys.length + jarDiff.size();
+            double currentEntry = 0;
 
-        // Handle all remove commands
-        oldjarNames.removeAll(ignoreSet);
-        size -= ignoreSet.size();
+            // Handle all remove commands
+            oldjarNames.removeAll(ignoreSet);
+            size -= ignoreSet.size();
 
-        // Add content from JARDiff
-        Enumeration<JarEntry> entries = jarDiff.entries();
-        if (entries != null) {
-            while (entries.hasMoreElements()) {
-                JarEntry entry = entries.nextElement();
-                if (!INDEX_NAME.equals(entry.getName())) {
-                    updateObserver(observer, currentEntry, size);
-                    currentEntry++;
-                    writeEntry(jos, entry, jarDiff);
+            // Add content from JARDiff
+            Enumeration<JarEntry> entries = jarDiff.entries();
+            if (entries != null) {
+                while (entries.hasMoreElements()) {
+                    JarEntry entry = entries.nextElement();
+                    if (!INDEX_NAME.equals(entry.getName())) {
+                        updateObserver(observer, currentEntry, size);
+                        currentEntry++;
+                        writeEntry(jos, entry, jarDiff);
 
-                    // Remove entry from oldjarNames since no implicit move is
-                    // needed
-                    boolean wasInOld = oldjarNames.remove(entry.getName());
+                        // Remove entry from oldjarNames since no implicit move is
+                        // needed
+                        boolean wasInOld = oldjarNames.remove(entry.getName());
 
-                    // Update progress counters. If it was in old, we do not
-                    // need an implicit move, so adjust total size.
-                    if (wasInOld) {
+                        // Update progress counters. If it was in old, we do not
+                        // need an implicit move, so adjust total size.
+                        if (wasInOld) {
+                            size--;
+                        }
+
+                    } else {
+                        // no write is done, decrement size
                         size--;
                     }
+                }
+            }
 
-                } else {
-                    // no write is done, decrement size
+            // go through the renameMap and apply move for each entry
+            for (String newName : keys) {
+                // Apply move <oldName> <newName> command
+                String oldName = renameMap.get(newName);
+
+                // Get source JarEntry
+                JarEntry oldEntry = oldJar.getJarEntry(oldName);
+                if (oldEntry == null) {
+                    String moveCmd = MOVE_COMMAND + oldName + " " + newName;
+                    throw new IOException("error.badmove: " + moveCmd);
+                }
+
+                // Create dest JarEntry
+                JarEntry newEntry = new JarEntry(newName);
+                newEntry.setTime(oldEntry.getTime());
+                newEntry.setSize(oldEntry.getSize());
+                newEntry.setCompressedSize(oldEntry.getCompressedSize());
+                newEntry.setCrc(oldEntry.getCrc());
+                newEntry.setMethod(oldEntry.getMethod());
+                newEntry.setExtra(oldEntry.getExtra());
+                newEntry.setComment(oldEntry.getComment());
+
+                updateObserver(observer, currentEntry, size);
+                currentEntry++;
+
+                writeEntry(jos, newEntry, oldJar.getInputStream(oldEntry));
+
+                // Remove entry from oldjarNames since no implicit move is needed
+                boolean wasInOld = oldjarNames.remove(oldName);
+
+                // Update progress counters. If it was in old, we do not need an
+                // implicit move, so adjust total size.
+                if (wasInOld) {
                     size--;
                 }
             }
-        }
 
-        // go through the renameMap and apply move for each entry
-        for (String newName : keys) {
-            // Apply move <oldName> <newName> command
-            String oldName = renameMap.get(newName);
-
-            // Get source JarEntry
-            JarEntry oldEntry = oldJar.getJarEntry(oldName);
-            if (oldEntry == null) {
-                String moveCmd = MOVE_COMMAND + oldName + " " + newName;
-                throw new IOException("error.badmove: " + moveCmd);
+            // implicit move
+            Iterator<String> iEntries = oldjarNames.iterator();
+            if (iEntries != null) {
+                while (iEntries.hasNext()) {
+                    String name = iEntries.next();
+                    JarEntry entry = oldJar.getJarEntry(name);
+                    updateObserver(observer, currentEntry, size);
+                    currentEntry++;
+                    writeEntry(jos, entry, oldJar);
+                }
             }
-
-            // Create dest JarEntry
-            JarEntry newEntry = new JarEntry(newName);
-            newEntry.setTime(oldEntry.getTime());
-            newEntry.setSize(oldEntry.getSize());
-            newEntry.setCompressedSize(oldEntry.getCompressedSize());
-            newEntry.setCrc(oldEntry.getCrc());
-            newEntry.setMethod(oldEntry.getMethod());
-            newEntry.setExtra(oldEntry.getExtra());
-            newEntry.setComment(oldEntry.getComment());
-
             updateObserver(observer, currentEntry, size);
-            currentEntry++;
 
-            writeEntry(jos, newEntry, oldJar.getInputStream(oldEntry));
-
-            // Remove entry from oldjarNames since no implicit move is needed
-            boolean wasInOld = oldjarNames.remove(oldName);
-
-            // Update progress counters. If it was in old, we do not need an
-            // implicit move, so adjust total size.
-            if (wasInOld) {
-                size--;
-            }
+        } finally {
+            StreamUtil.close(jos);
+            closeFile(oldJar);
+            closeFile(jarDiff);
         }
-
-        // implicit move
-        Iterator<String> iEntries = oldjarNames.iterator();
-        if (iEntries != null) {
-            while (iEntries.hasNext()) {
-                String name = iEntries.next();
-                JarEntry entry = oldJar.getJarEntry(name);
-                updateObserver(observer, currentEntry, size);
-                currentEntry++;
-                writeEntry(jos, entry, oldJar);
-            }
-        }
-        updateObserver(observer, currentEntry, size);
-
-        jos.finish();
     }
 
-    protected void updateObserver (ProgressObserver observer,
-                                   double currentSize, double size)
+    protected void updateObserver (ProgressObserver observer, double currentSize, double size)
     {
-	if (observer != null) {
-	    observer.progress((int)(100*currentSize/size));
-	}
+        if (observer != null) {
+            observer.progress((int)(100*currentSize/size));
+        }
     }
 
     protected void determineNameMapping (
@@ -279,6 +284,16 @@ public class JarDiffPatcher implements JarDiffCodes
             size = data.read(newBytes);
         }
         data.close();
+    }
+
+    private static void closeFile (JarFile jar) {
+        if (jar != null) {
+            try {
+                jar.close();
+            } catch (IOException e) {
+                e.printStackTrace(System.err);
+            }
+        }
     }
 
     protected static final int DEFAULT_READ_SIZE = 2048;

@@ -105,6 +105,7 @@ public class GetdownApp
                                 handleWindowClose();
                             }
                         });
+                        _frame.setUndecorated(_ifc.hideDecorations);
                         _frame.setResizable(false);
                     } else {
                         _frame.setTitle(title);

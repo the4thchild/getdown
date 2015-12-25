@@ -168,8 +168,7 @@ public class Patcher
 
             // now apply the patch to create the new target file
             patcher = new JarDiffPatcher();
-            fout = new FileOutputStream(target);
-            patcher.patchJar(otarget.getPath(), patch.getPath(), fout, obs);
+            patcher.patchJar(otarget.getPath(), patch.getPath(), target, obs);
 
         } catch (IOException ioe) {
             if (patcher == null) {
